@@ -1,0 +1,442 @@
+# backend/main.py
+# This file contains the main FastAPI application, including API endpoints,
+# background tasks for document processing, and OpenAI integration.
+
+import os
+import shutil
+import uuid
+import json
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+import aiofiles
+import docx
+from pydantic import BaseModel
+import openai  # Import the OpenAI library
+
+# --- Application Setup ---
+app = FastAPI(title="AI RFP Generator")
+
+# --- OpenAI API Configuration ---
+# IMPORTANT: Replace "YOUR_OPENAI_API_KEY" with your actual OpenAI API key.
+# For better security, use environment variables to store your API key.
+# For example: openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = "YOUR_OPENAI_API_KEY"
+
+# CORS (Cross-Origin Resource Sharing) middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Directory Setup ---
+UPLOAD_DIR = "uploads"
+GENERATED_DIR = "generated"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(GENERATED_DIR, exist_ok=True)
+
+# --- In-memory "database" for tracking task status ---
+tasks_db = {}
+
+class TaskStatus(BaseModel):
+    status: str
+    message: str
+    file_path: str | None = None
+
+# --- OpenAI API Integration ---
+async def call_openai_api_for_extraction(text: str, prompt: str) -> dict:
+    """Calls the OpenAI API to extract structured JSON data from text."""
+    print(f"--- Calling OpenAI API for Extraction: {prompt[:30]}... ---")
+    try:
+        # Using the recommended gpt-4o model
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert financial analyst extracting data from RFPs. Respond ONLY with valid JSON."},
+                {"role": "user", "content": f"{prompt}\n\n--- RFP TEXT ---\n{text}"}
+            ],
+            temperature=0.1,  # Low temperature for factual extraction
+            response_format={"type": "json_object"} # Ensure JSON output
+        )
+        extracted_json = json.loads(response.choices[0].message['content'])
+        return extracted_json
+    except Exception as e:
+        print(f"OpenAI API Error (Extraction): {e}")
+        return {"error": str(e)}
+
+async def call_openai_api_for_generation(context_summary: str, prompt: str) -> str:
+    """Calls the OpenAI API to generate a section of the new RFP."""
+    print(f"--- Calling OpenAI API for Generation: {prompt[:30]}... ---")
+    try:
+        # Using the recommended gpt-4o model
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a professional RFP document generator. Write the requested section clearly and formally."},
+                {"role": "user", "content": f"{prompt}\n\n--- CONTEXT ---\n{context_summary}"}
+            ],
+            temperature=0.5,  # Higher temperature for creative synthesis
+        )
+        return response.choices[0].message['content']
+    except Exception as e:
+        print(f"OpenAI API Error (Generation): {e}")
+        return f"Error generating content: {e}"
+
+
+# --- Document Processing Logic ---
+
+def extract_text_from_docx(filepath: str) -> str:
+    """Extracts all text from a .docx file."""
+    try:
+        doc = docx.Document(filepath)
+        return "\n".join([para.text for para in doc.paragraphs])
+    except Exception as e:
+        print(f"Error reading docx {filepath}: {e}")
+        return ""
+
+def add_content_to_doc(doc, content):
+    """Adds generated content (potentially with markdown headings) to a docx object."""
+    for line in content.split('\n'):
+        if line.startswith('## '):
+            doc.add_heading(line.lstrip('## '), level=2)
+        elif line.startswith('# '):
+            doc.add_heading(line.lstrip('# '), level=1)
+        elif line.strip():
+            doc.add_paragraph(line)
+
+async def process_uploaded_rfps(task_id: str, filenames: list[str]):
+    """Background task to perform the full RFP generation pipeline."""
+    try:
+        tasks_db[task_id] = TaskStatus(status="processing", message="Starting RFP analysis...")
+
+        # --- Phase 1: Information Extraction ---
+        all_extracted_data = []
+        prompts_extraction = {
+            "summary": "Prompt 1: Extract Executive Summary & Project Overview. Output JSON with keys: section_title, summary_text, project_scope_overview, overarching_goals.",
+            "background": "Prompt 2: Extract Background & Context of RFP Issuer. Output JSON with keys: firm_name, establishment_details, mission_and_values.",
+            "requirements": "Prompt 5: Extract Specific Requirements & Questions (Categorized). Output JSON with key 'categorized_requirements' as an array of objects, each with 'category_name' and 'questions' (an array of strings)."
+        }
+
+        for idx, filename in enumerate(filenames):
+            tasks_db[task_id] = TaskStatus(status="processing", message=f"Reading file {idx+1}/{len(filenames)}: {filename}")
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            text = extract_text_from_docx(filepath) if filename.endswith(".docx") else ""
+
+            if not text: continue
+
+            doc_extractions = {"original_filename": filename}
+            for i, (key, prompt) in enumerate(prompts_extraction.items()):
+                tasks_db[task_id] = TaskStatus(status="processing", message=f"AI Analysis on {filename} (Step {i+1}/{len(prompts_extraction)})...")
+                extracted_section = await call_openai_api_for_extraction(text, prompt)
+                doc_extractions[key] = extracted_section
+            all_extracted_data.append(doc_extractions)
+
+        # --- In-memory Knowledge Base Simulation ---
+        tasks_db[task_id] = TaskStatus(status="processing", message="Aggregating common questions...")
+        all_questions = []
+        for data in all_extracted_data:
+            reqs = data.get("requirements", {}).get("categorized_requirements", [])
+            if isinstance(reqs, list):
+                for category in reqs:
+                    all_questions.extend(category.get("questions", []))
+        
+        # Simple deduplication
+        unique_questions = list(set(all_questions))
+
+        # --- Phase 2: New RFP Template Generation ---
+        tasks_db[task_id] = TaskStatus(status="processing", message="Synthesizing new RFP template...")
+        context_summary = f"Synthesized from {len(filenames)} RFPs. Common questions found: {json.dumps(unique_questions[:10])}" # Sample context
+
+        prompts_generation = {
+            "Executive Summary": "Prompt A: Generate a new RFP Executive Summary.",
+            "Requirements": "Prompt D: Generate a new RFP Requirements Section based on the provided list of common questions."
+        }
+
+        generated_doc = docx.Document()
+        generated_doc.add_heading('Generated Request for Proposal (RFP)', level=0)
+
+        for i, (heading, prompt) in enumerate(prompts_generation.items()):
+            tasks_db[task_id] = TaskStatus(status="processing", message=f"Generating section {i+1}/{len(prompts_generation)}: {heading}...")
+            section_content = await call_openai_api_for_generation(context_summary, prompt)
+            add_content_to_doc(generated_doc, section_content)
+
+        # Save the final document
+        output_filename = f"Generated_RFP_{task_id}.docx"
+        output_filepath = os.path.join(GENERATED_DIR, output_filename)
+        generated_doc.save(output_filepath)
+
+        tasks_db[task_id] = TaskStatus(status="completed", message="RFP generated successfully!", file_path=output_filepath)
+
+    except Exception as e:
+        print(f"Error during background task {task_id}: {e}")
+        tasks_db[task_id] = TaskStatus(status="error", message=str(e))
+
+
+# --- API Endpoints ---
+
+@app.post("/generate-rfp/")
+async def generate_rfp_endpoint(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...)):
+    """
+    Endpoint to upload RFPs and start the generation process.
+    """
+    if openai.api_key == "YOUR_OPENAI_API_KEY":
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured on the backend.")
+
+    if len(files) > 7:
+        raise HTTPException(status_code=400, detail="Please upload a maximum of 7 files.")
+    
+    task_id = str(uuid.uuid4())
+    filenames = []
+    for file in files:
+        # Basic validation for .docx files
+        if not file.filename.endswith(".docx"):
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.filename}. Only .docx is supported.")
+        
+        filepath = os.path.join(UPLOAD_DIR, f"{task_id}_{file.filename}")
+        async with aiofiles.open(filepath, 'wb') as out_file:
+            content = await file.read()
+            await out_file.write(content)
+        filenames.append(f"{task_id}_{file.filename}")
+    
+    background_tasks.add_task(process_uploaded_rfps, task_id, filenames)
+    
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"task_id": task_id, "message": "RFP generation started."})
+
+
+@app.get("/tasks/{task_id}/status")
+async def get_task_status(task_id: str):
+    """Endpoint to check the status of a generation task."""
+    task = tasks_db.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@app.get("/download/{task_id}")
+async def download_file(task_id: str):
+    """Endpoint to download the generated RFP."""
+    task = tasks_db.get(task_id)
+    if not task or task.status != "completed":
+        raise HTTPException(status_code=404, detail="File not ready or task failed.")
+    
+    filepath = task.file_path
+    filename = os.path.basename(filepath)
+    return FileResponse(path=filepath, filename=filename, media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+# --- React Frontend ---
+# This section serves the static files for the React app.
+# In a production deployment, you would typically use a web server like Nginx.
+from fastapi.staticfiles import StaticFiles
+
+os.makedirs("static", exist_ok=True)
+
+# Create a placeholder index.html if it doesn't exist
+if not os.path.exists("static/index.html"):
+    with open("static/index.html", "w") as f:
+        f.write("<!DOCTYPE html><html><head><title>React App</title></head><body><div id='root'></div></body></html>")
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+```react
+// frontend/src/App.js
+// This file contains the React frontend application.
+// It uses Tailwind CSS for styling. Make sure you have it set up in your project.
+// To run: npx create-react-app frontend; cd frontend; npm install axios; npm start
+
+import React, { useState, useCallback, useEffect } from 'react';
+import axios from 'axios';
+import { useDropzone } from 'react-dropzone';
+
+// --- Configuration ---
+// Make sure this URL points to your FastAPI backend.
+const API_URL = '[http://127.0.0.1:8000](http://127.0.0.1:8000)';
+
+function App() {
+  const [files, setFiles] = useState([]);
+  const [taskId, setTaskId] = useState(null);
+  const [taskStatus, setTaskStatus] = useState(null);
+  const [error, setError] = useState(null);
+  const [isPolling, setIsPolling] = useState(false);
+
+  // File dropzone setup
+  const onDrop = useCallback(acceptedFiles => {
+    // Limit to 7 files
+    const newFiles = [...files, ...acceptedFiles].slice(0, 7);
+    setFiles(newFiles);
+  }, [files]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    },
+    maxFiles: 7,
+  });
+
+  // Function to remove a file from the list
+  const removeFile = (fileName) => {
+    setFiles(files.filter(file => file.name !== fileName));
+  };
+
+  // Function to start the RFP generation process
+  const handleGenerate = async () => {
+    if (files.length === 0) {
+      setError("Please upload at least one RFP document.");
+      return;
+    }
+    if (files.length < 5) {
+        console.warn("Warning: For best results, upload 5-7 example RFPs.");
+    }
+
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    setError(null);
+    setTaskStatus({ status: 'uploading', message: 'Uploading files...' });
+    setIsPolling(true);
+
+    try {
+      const response = await axios.post(`${API_URL}/generate-rfp/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setTaskId(response.data.task_id);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || "An unexpected error occurred during upload.");
+      setIsPolling(false);
+      setTaskStatus(null);
+    }
+  };
+  
+  // Polling effect to check task status
+  useEffect(() => {
+    let interval;
+    if (isPolling && taskId) {
+      interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`${API_URL}/tasks/${taskId}/status`);
+          const statusData = response.data;
+          setTaskStatus(statusData);
+
+          if (statusData.status === 'completed' || statusData.status === 'error') {
+            setIsPolling(false);
+            clearInterval(interval);
+          }
+        } catch (err) {
+          console.error("Error polling for status:", err);
+          setError("Could not retrieve task status.");
+          setIsPolling(false);
+          clearInterval(interval);
+        }
+      }, 3000); // Poll every 3 seconds
+    }
+    return () => clearInterval(interval);
+  }, [isPolling, taskId]);
+
+  // Function to handle downloading the result
+  const handleDownload = () => {
+      window.open(`${API_URL}/download/${taskId}`, '_blank');
+  };
+
+  // Reset Application State
+  const handleReset = () => {
+      setFiles([]);
+      setTaskId(null);
+      setTaskStatus(null);
+      setError(null);
+      setIsPolling(false);
+  }
+
+  return (
+    <div className="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center font-sans p-4">
+      <div className="w-full max-w-3xl mx-auto bg-slate-800 rounded-2xl shadow-2xl p-8 space-y-8">
+        
+        {/* Header */}
+        <div className="text-center">
+            <h1 className="text-4xl font-bold text-cyan-400">AI RFP Generator</h1>
+            <p className="text-slate-400 mt-2">Upload 5-7 example RFPs (.docx) to generate a new, synthesized template.</p>
+        </div>
+
+        {/* Main Content Area */}
+        {!taskStatus ? (
+          <>
+            {/* Dropzone */}
+            <div {...getRootProps()} className={`border-4 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragActive ? 'border-cyan-400 bg-slate-700' : 'border-slate-600 hover:border-cyan-500'}`}>
+              <input {...getInputProps()} />
+              <p className="text-lg">Drag & drop .docx files here, or click to select</p>
+              <p className="text-sm text-slate-500 mt-1">Maximum 7 files</p>
+            </div>
+
+            {/* File List */}
+            {files.length > 0 && (
+              <div className="space-y-3">
+                  <h3 className="font-semibold text-lg">Selected Files:</h3>
+                  <ul className="space-y-2">
+                      {files.map(file => (
+                          <li key={file.name} className="flex justify-between items-center bg-slate-700 p-3 rounded-lg">
+                              <span>{file.name}</span>
+                              <button onClick={() => removeFile(file.name)} className="text-red-400 hover:text-red-300 font-bold">&times;</button>
+                          </li>
+                      ))}
+                  </ul>
+              </div>
+            )}
+
+            {/* Action Button */}
+            <button
+              onClick={handleGenerate}
+              disabled={files.length === 0}
+              className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg text-xl transition-all"
+            >
+              Generate RFP Template
+            </button>
+          </>
+        ) : (
+          /* Status/Result Display */
+          <div className="text-center p-6 bg-slate-700 rounded-lg">
+              <h2 className="text-2xl font-bold mb-4 text-cyan-400">{taskStatus.status.toUpperCase()}</h2>
+              <p className="text-lg mb-6">{taskStatus.message}</p>
+              
+              {taskStatus.status === 'processing' && (
+                  <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-cyan-400 mx-auto"></div>
+              )}
+
+              {taskStatus.status === 'completed' && (
+                  <button onClick={handleDownload} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-lg text-xl transition-all">
+                      Download Generated RFP
+                  </button>
+              )}
+              
+              {taskStatus.status === 'error' && (
+                  <div className="bg-red-900/50 p-4 rounded-lg text-red-300">
+                      <strong>Error:</strong> {error || taskStatus.message}
+                  </div>
+              )}
+
+              {(taskStatus.status === 'completed' || taskStatus.status === 'error') && (
+                  <button onClick={handleReset} className="mt-4 w-full bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg transition-all">
+                    Start Over
+                  </button>
+              )}
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && !taskStatus && (
+            <div className="bg-red-900/50 p-4 rounded-lg text-red-300 text-center">
+              <strong>Error:</strong> {error}
+            </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+export default App;

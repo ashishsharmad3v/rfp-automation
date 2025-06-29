@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABC Trust RFP Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Chosen Palette: Serene Neutrals */
+        :root {
+            --primary-bg: #FDFDFD;
+            --secondary-bg: #EEEEEE;
+            --accent-color-1: #4CAF50; /* Subtle Green */
+            --accent-color-2: #2196F3; /* Soft Blue */
+            --text-color-dark: #333333;
+            --text-color-light: #666666;
+        }
+        body {
+            background-color: var(--primary-bg);
+            color: var(--text-color-dark);
+            font-family: 'Inter', sans-serif;
+        }
+        .header-bg {
+            background-color: var(--secondary-bg);
+        }
+        .nav-button {
+            background-color: var(--secondary-bg);
+            color: var(--text-color-dark);
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .nav-button.active, .nav-button:hover {
+            background-color: var(--accent-color-1);
+            color: white;
+        }
+        .category-card {
+            background-color: white;
+            border: 1px solid var(--secondary-bg);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease-in-out;
+        }
+        .category-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .accordion-header {
+            background-color: var(--secondary-bg);
+            color: var(--text-color-dark);
+            transition: background-color 0.2s;
+        }
+        .accordion-header:hover {
+            background-color: var(--accent-color-2);
+            color: white;
+        }
+        .accordion-content {
+            background-color: white;
+            border: 1px solid var(--secondary-bg);
+            border-top: none;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Max width for chart */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height for mobile */
+            max-height: 400px; /* Max height to prevent vertical overflow */
+            background-color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px; /* Larger height for tablet */
+            }
+        }
+        @media (min-width: 1024px) {
+            .chart-container {
+                height: 400px; /* Even larger height for desktop */
+            }
+        }
+        .ml-logo {
+            filter: grayscale(100%);
+            opacity: 0.7;
+        }
+        .compliance-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        .compliance-checkbox {
+            margin-right: 0.5rem;
+            margin-top: 0.25rem; /* Adjust alignment with text */
+            flex-shrink: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+            accent-color: var(--accent-color-1); /* Color for checked state */
+        }
+        .upload-area {
+            border: 2px dashed var(--secondary-bg);
+            background-color: white;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .upload-area:hover {
+            background-color: #F8F8F8;
+            border-color: var(--accent-color-1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- Application Structure Plan: The SPA is structured into six thematic sections:
+    1. Introduction: Provides context about the RFP.
+    2. RFP Overview Dashboard: A central hub with cards representing major RFP sections (Firm, Client Service, Investment Philosophy, Manager Research, Compliance). Each card shows the number of questions in that section. This serves as a primary visual navigation.
+    3. Interactive Question Explorer: The main content area where questions from selected categories are displayed. Questions are collapsible to maintain readability. Filters allow users to focus on specific sections.
+    4. Key Metrics Summary: Highlights specific quantitative data points requested in the RFP, presented as digestible statistics.
+    5. Compliance Readiness Checklist: An interactive checklist derived from the Compliance section, allowing users to track readiness for key requirements.
+    6. Upload RFPs: A new section enabling users to upload multiple RFP documents for processing, simulating a call to the backend.
+    This structure was chosen to prioritize user understanding and ease of navigation over mirroring the PDF's linear flow. Users can quickly grasp the RFP's scope and dive into specific areas of interest without excessive scrolling or cognitive load. The dashboard acts as a visual table of contents, and the interactive explorer facilitates detailed review. The upload section adds a practical utility, allowing users to contribute new data for analysis.
+    -->
+    
+    <!-- Visualization & Content Choices:
+    - Report Info: Section Categories -> Goal: Inform, Organize, Compare -> Viz/Presentation Method: Dashboard with cards (HTML/Tailwind), Donut Chart for overall distribution (Chart.js Canvas) -> Interaction: Clicking cards filters question explorer, Chart tooltips -> Justification: Provides immediate high-level overview and acts as primary navigation. Visual summary helps grasp RFP emphasis. -> Library/Method: HTML/Tailwind, Chart.js.
+    - Report Info: Individual Questions within Sections -> Goal: Inform, Explore -> Viz/Presentation Method: Collapsible/expandable text blocks (HTML/Tailwind) -> Interaction: Click to expand/collapse -> Justification: Keeps main view clean while allowing deep dive into specific questions. -> Library/Method: Vanilla JS for toggle.
+    - Report Info: Overall RFP Structure (sections and their question counts) -> Goal: Inform, Analyze -> Viz/Presentation Method: Donut Chart (Chart.js Canvas) -> Interaction: Tooltips on hover -> Justification: Visual summary quickly conveys which areas of the RFP are most extensive, helping respondents prioritize. -> Library/Method: Chart.js.
+    - Report Info: Key Quantitative Requests (e.g., AUM, Insurance levels) -> Goal: Inform -> Viz/Presentation Method: Simple text cards (HTML/Tailwind) -> Interaction: None directly -> Justification: Direct presentation of specific numerical requirements. -> Library/Method: HTML/Tailwind.
+    - Report Info: Compliance Checklist (from Section 5) -> Goal: Task-oriented, Inform -> Viz/Presentation Method: Interactive list of compliance-related questions with checkboxes (HTML/Tailwind) -> Interaction: Check/uncheck boxes (state managed client-side) -> Justification: Directly supports a key user task for compliance teams responding to such RFPs. -> Library/Method: Vanilla JS for checkbox state.
+    - Report Info: RFP Upload -> Goal: Utility, Data Input -> Viz/Presentation Method: File input with visual feedback, upload button, status messages (HTML/Tailwind) -> Interaction: File selection, button click -> Justification: Provides a clear interface for users to contribute RFPs, essential for the broader "AI RFP Generator" concept. -> Library/Method: HTML/Tailwind, Vanilla JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <header class="header-bg shadow-sm py-4">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center">
+                <img src="https://placehold.co/40x40/DDDDDD/666666?text=ABC" alt="ABC Trust Logo" class="h-8 w-8 mr-2 rounded-md ml-logo">
+                ABC Trust RFP Explorer
+            </h1>
+            <nav id="main-nav" class="hidden"> <!-- Initially hidden -->
+                <ul class="flex space-x-2 sm:space-x-4">
+                    <li><button data-section="overview" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base">Overview</button></li>
+                    <li><button data-section="explore" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base">Explore Questions</button></li>
+                    <li><button data-section="insights" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base">Key Insights</button></li>
+                    <li><button data-section="compliance" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base">Compliance Check</button></li>
+                    <li><button data-section="upload" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base">Upload RFPs</button></li>
+                </ul>
+            </nav>
+            <nav id="upload-nav-only"> <!-- Only visible initially for upload -->
+                 <ul class="flex space-x-2 sm:space-x-4">
+                    <li><button data-section="upload" class="nav-button px-3 py-2 rounded-md text-sm sm:text-base active">Upload RFPs</button></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <section id="overview" class="hidden">
+            <h2 class="text-3xl font-semibold mb-6">Welcome to the RFP Explorer</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                This interactive tool helps you navigate and understand the ABC Trust Sample Request for Proposal (RFP) Questionnaire for Investment Service Providers. Designed for nonprofit organizations, this RFP covers key areas from firm overview and investment philosophy to compliance and client service. Use this explorer to quickly locate specific questions, identify common requirements, and assess your readiness to respond.
+            </p>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div class="md:col-span-1 lg:col-span-2">
+                    <h3 class="text-2xl font-semibold mb-4">RFP Section Overview</h3>
+                    <p class="text-gray-700 mb-6">
+                        This dashboard provides a high-level view of the RFP's structure, indicating the number of questions within each major section. Click on any card to filter the "Explore Questions" section and dive into the details of that specific category. This helps in understanding the emphasis of the RFP and prioritizing your response.
+                    </p>
+                    <div class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4" id="category-cards">
+                        <!-- Category Cards will be dynamically loaded here -->
+                    </div>
+                </div>
+                <div class="md:col-span-1 lg:col-span-1 flex items-center justify-center">
+                    <div class="chart-container">
+                        <canvas id="rfpSectionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="text-center mt-8">
+                <button data-section="explore" class="px-6 py-3 rounded-md bg-accent-color-1 text-white font-medium hover:bg-green-700 transition-colors">
+                    Start Exploring All Questions &rarr;
+                </button>
+            </div>
+        </section>
+
+        <section id="explore" class="hidden">
+            <h2 class="text-3xl font-semibold mb-6">Explore RFP Questions</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                This section allows you to delve into the detailed questions asked in the RFP. Use the category filter to narrow down the questions by topic. Each question is presented in an expandable format, allowing you to focus on specific details without being overwhelmed by the entire questionnaire.
+            </p>
+            <div class="mb-6 flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <label for="categoryFilter" class="font-medium text-lg">Filter by Category:</label>
+                <select id="categoryFilter" class="p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent-color-1 flex-grow">
+                    <option value="all">All Categories</option>
+                    <!-- Options populated by JS -->
+                </select>
+            </div>
+            <div id="questionsContainer" class="space-y-4">
+                <!-- Questions will be dynamically loaded here -->
+            </div>
+        </section>
+
+        <section id="insights" class="hidden">
+            <h2 class="text-3xl font-semibold mb-6">Key Insights & Quantitative Requests</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                This section highlights crucial quantitative data points and specific requirements mentioned throughout the RFP. Understanding these figures is vital for preparing a data-driven and compliant response, demonstrating your firm's capabilities and alignment with the client's expectations.
+            </p>
+            <div class="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between category-card">
+                    <h3 class="text-xl font-semibold mb-3">Firm's Assets Under Management (AUM)</h3>
+                    <p class="text-gray-700 text-base">
+                        The RFP specifically requests the firm's total Assets Under Management.
+                        This is a key indicator of scale and financial stability.
+                    </p>
+                    <p class="mt-4 text-accent-color-1 text-4xl font-bold">"What is your firm's AUM?"</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between category-card">
+                    <h3 class="text-xl font-semibold mb-3">Client Base Composition</h3>
+                    <p class="text-gray-700 text-base">
+                        Information on the types of clients served, the number of nonprofit clients, length of service, and range of asset values managed for nonprofit clients is requested.
+                    </p>
+                    <p class="mt-4 text-accent-color-1 text-4xl font-bold">"Describe your client base"</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between category-card">
+                    <h3 class="text-xl font-semibold mb-3">Insurance Levels</h3>
+                    <p class="text-gray-700 text-base">
+                        The RFP requires details on Errors & Omissions (E&O) insurance and any other fiduciary or professional liability insurance carried by the firm.
+                    </p>
+                    <p class="mt-4 text-accent-color-1 text-4xl font-bold">"E&O & Liability Insurance Levels"</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between category-card md:col-span-2 lg:col-span-1">
+                    <h3 class="text-xl font-semibold mb-3">Investment Manager Database Size</h3>
+                    <p class="text-gray-700 text-base">
+                        The RFP asks about the database used for manager search and selection, including whether it's in-house or third-party, the number of managers, and update frequency.
+                    </p>
+                    <p class="mt-4 text-accent-color-1 text-4xl font-bold">"Database Size & Source"</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="compliance" class="hidden">
+            <h2 class="text-3xl font-semibold mb-6">Compliance Readiness Checklist</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                This interactive checklist is designed to help you quickly assess your firm's readiness for the compliance and regulatory requirements outlined in the RFP's Section 5. Mark items as complete as you gather the necessary information.
+            </p>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div id="complianceChecklistContainer">
+                    <!-- Compliance items will be loaded here -->
+                </div>
+                <button id="resetCompliance" class="mt-6 px-4 py-2 rounded-md bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition-colors">
+                    Reset Checklist
+                </button>
+            </div>
+        </section>
+
+        <section id="upload" class="active-section">
+            <h2 class="text-3xl font-semibold mb-6">Upload Example RFPs for Analysis</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                Upload 5 to 7 example RFP documents (DOCX or PDF) here. These documents will be processed to extract key information, which will then be used to inform the generation of new RFP templates for your organization. This process simulates calling a FastAPI backend to perform the extraction and analysis.
+            </p>
+            
+            <div class="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+                <div class="upload-area p-8 border-dashed border-2 rounded-lg text-center cursor-pointer hover:border-accent-color-1 transition-colors w-full max-w-xl">
+                    <input type="file" id="rfpFileInput" multiple accept=".pdf,.doc,.docx" class="hidden">
+                    <label for="rfpFileInput" class="text-accent-color-2 text-lg font-medium cursor-pointer flex items-center justify-center">
+                        <span class="text-4xl mr-2">&#x2191;</span> Drag & Drop Files or Click to Browse
+                    </label>
+                    <p class="text-gray-500 text-sm mt-2">Up to 7 files (.pdf, .doc, .docx) accepted</p>
+                </div>
+                
+                <div id="fileList" class="mt-4 w-full max-w-xl text-gray-700">
+                    <!-- Selected files will be listed here -->
+                </div>
+
+                <button id="uploadRFPButton" class="mt-6 px-6 py-3 rounded-md bg-accent-color-1 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    Simulate Upload to FastAPI
+                </button>
+
+                <div id="uploadStatus" class="mt-4 w-full max-w-xl text-center text-sm">
+                    <!-- Upload status messages will appear here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="header-bg py-4 mt-8">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-600 text-sm">
+            ABC Trust Sample Request for Proposal (RFP) Questionnaire - Interactive Explorer.
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <script>
+        // Global mutable data object
+        let rfpDataGlobal = {
+            "Firm Overview": [
+                "Please provide the full legal name of your firm and the address, telephone number and other contact information for your main office, the office that will service our organization (if different), and the primary representative who will be assigned to our relationship.",
+                "Please provide a brief description of your firm's background, history and ownership structure.",
+                "What's the scope of services your firm would provide to our organization?",
+                "What are your firm's assets under management? Please describe your client base, including types of clients served, the number of nonprofit clients, the length of time of service, and the range of asset values among your nonprofit clients.",
+                "What do you consider key strengths of your firm that distinguish you from competitors?",
+                "What other value-added services could you provide our organization?"
+            ],
+            "Client Service Team": [
+                "How will the team supporting our organization be structured? Please provide biographies of the key individuals assigned to our relationship, including names, titles, educational background, professional experience and industry credentials.",
+                "Describe your customer service philosophy.",
+                "How often would your team be willing to meet with our investment committee? What topics would typically be discussed?"
+            ],
+            "Investment Philosophy and Process": [
+                "What's your investment philosophy? Please provide a brief overview of your investment process.",
+                "What's your approach to developing and/or revising investment policy statements for nonprofit organizations? How do you monitor compliance with a client's investment policy?",
+                "Describe your process for developing an asset allocation model.",
+                "What's your approach to risk management?",
+                "Please describe your portfolio construction methodology."
+            ],
+            "Investment Manager Research and Selection": [
+                "Briefly describe your research organization. How many individuals are specifically dedicated to investment manager due diligence?",
+                "Please provide a detailed description of your firm's investment manager evaluation and selection process.",
+                "Describe the database used to conduct manager search and selection processes. Is the database developed in-house or third-party? How many managers are in the database, and how frequently is information updated? Do managers pay a fee for inclusion in your database?",
+                "What's your process for putting a manager on “watch” and/or terminating a manager?"
+            ],
+            "Compliance and Conflicts of Interest": [
+                "Please describe how your firm manages conflicts of interest.",
+                "Is your firm a registered investment adviser under the Investment Advisers Act of 1940? Will your firm accept fiduciary responsibility in providing investment management services to our organization?",
+                "Within the past five years, has your firm, its principals, employees or affiliates ever been the focus of a non-routine SEC inquiry or investigation or similar inquiry or investigation by any federal, state or self-regulatory organization, or been a party to any litigation concerning fiduciary responsibility or other. If yes to any of the above, please provide details.",
+                "Describe the levels for errors and omission insurance and any other fiduciary or professional liability insurance your firm carries."
+            ]
+        };
+
+        const complianceQuestions = [
+            "Describe how your firm manages conflicts of interest.",
+            "Confirm RIA registration and acceptance of fiduciary responsibility.",
+            "Detail past non-routine SEC/regulatory inquiries or litigation.",
+            "Provide levels of Errors and Omissions (E&O) and other liability insurance."
+        ];
+
+        let sectionChart; // Declared outside to manage its lifecycle
+
+        function wrapLabel(label, maxCharsPerLine) {
+            const words = label.split(' ');
+            let lines = [];
+            let currentLine = '';
+            words.forEach(word => {
+                if ((currentLine + word).length <= maxCharsPerLine) {
+                    currentLine += (currentLine === '' ? '' : ' ') + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            });
+            lines.push(currentLine);
+            return lines;
+        }
+
+        function initializeSectionChart() {
+            const ctx = document.getElementById('rfpSectionChart').getContext('2d');
+            // Destroy existing chart to prevent memory leaks/redraw issues if re-initializing
+            if (sectionChart) {
+                sectionChart.destroy();
+            }
+            const labels = Object.keys(rfpDataGlobal);
+            const data = labels.map(category => rfpDataGlobal[category].length);
+            const backgroundColors = [
+                'rgba(76, 175, 80, 0.8)',  // Accent 1
+                'rgba(33, 150, 243, 0.8)', // Accent 2
+                'rgba(255, 159, 64, 0.8)', // Orange
+                'rgba(153, 102, 255, 0.8)',// Purple
+                'rgba(255, 99, 132, 0.8)'  // Red
+            ];
+            const borderColors = [
+                'rgba(76, 175, 80, 1)',
+                'rgba(33, 150, 243, 1)',
+                'rgba(255, 159, 64, 1)',
+                'rgba(153, 102, 255, 1)',
+                'rgba(255, 99, 132, 1)'
+            ];
+
+            sectionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.map(label => wrapLabel(label, 16)),
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    size: 14
+                                },
+                                color: 'var(--text-color-dark)'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed + ' questions';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showSection(sectionId) {
+            document.querySelectorAll('main section').forEach(section => section.classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+            document.querySelectorAll('.nav-button').forEach(button => {
+                if (button.dataset.section === sectionId) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            });
+        }
+
+        function populateCategoryFilter() {
+            const categoryFilter = document.getElementById('categoryFilter');
+            categoryFilter.innerHTML = '<option value="all">All Categories</option>'; // Clear existing options
+            for (const category in rfpDataGlobal) {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                categoryFilter.appendChild(option);
+            }
+        }
+
+        function renderQuestions(filterCategory = 'all') {
+            const questionsContainer = document.getElementById('questionsContainer');
+            questionsContainer.innerHTML = '';
+            let questionsToRender = {};
+
+            if (filterCategory === 'all') {
+                questionsToRender = rfpDataGlobal;
+            } else {
+                questionsToRender[filterCategory] = rfpDataGlobal[filterCategory];
+            }
+
+            for (const category in questionsToRender) {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'mb-6';
+                categoryDiv.innerHTML = `
+                    <h3 class="text-2xl font-semibold mb-4 text-accent-color-2">${category}</h3>
+                `;
+                questionsToRender[category].forEach((question) => {
+                    const accordionItem = document.createElement('div');
+                    accordionItem.className = 'border rounded-lg mb-2 overflow-hidden';
+                    accordionItem.innerHTML = `
+                        <button class="accordion-header w-full text-left p-4 flex justify-between items-center text-lg font-medium focus:outline-none">
+                            <span>${question}</span>
+                            <span class="toggle-icon">+</span>
+                        </button>
+                        <div class="accordion-content p-4 text-gray-700 hidden">
+                            <p>Further details or clarifications for: "${question}" would appear here, if present in the original RFP. For this sample, assume this is where a detailed explanation or sub-questions would reside.</p>
+                        </div>
+                    `;
+                    questionsContainer.appendChild(accordionItem);
+                });
+            }
+            addAccordionListeners();
+        }
+
+        function addAccordionListeners() {
+            document.querySelectorAll('.accordion-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const content = header.nextElementSibling;
+                    const icon = header.querySelector('.toggle-icon');
+                    content.classList.toggle('hidden');
+                    if (content.classList.contains('hidden')) {
+                        icon.textContent = '+';
+                    } else {
+                        icon.textContent = '-';
+                    }
+                });
+            });
+        }
+
+        function renderCategoryCards() {
+            const categoryCardsContainer = document.getElementById('category-cards');
+            categoryCardsContainer.innerHTML = '';
+            for (const category in rfpDataGlobal) {
+                const card = document.createElement('div');
+                card.className = 'category-card p-6 rounded-lg shadow-md cursor-pointer';
+                card.setAttribute('data-category', category);
+                card.innerHTML = `
+                    <h3 class="text-xl font-semibold mb-2">${category}</h3>
+                    <p class="text-gray-600">${rfpDataGlobal[category].length} questions</p>
+                `;
+                categoryCardsContainer.appendChild(card);
+            }
+
+            document.querySelectorAll('.category-card').forEach(card => {
+                card.addEventListener('click', (event) => {
+                    const category = event.currentTarget.dataset.category;
+                    const categoryFilter = document.getElementById('categoryFilter');
+                    categoryFilter.value = category;
+                    renderQuestions(category);
+                    showSection('explore');
+                });
+            });
+        }
+
+        function renderComplianceChecklist() {
+            const complianceChecklistContainer = document.getElementById('complianceChecklistContainer');
+            complianceChecklistContainer.innerHTML = '';
+            complianceQuestions.forEach((question, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'compliance-item';
+                itemDiv.innerHTML = `
+                    <input type="checkbox" id="comp-q-${index}" class="compliance-checkbox rounded-sm">
+                    <label for="comp-q-${index}" class="text-gray-800 flex-grow">${question}</label>
+                `;
+                complianceChecklistContainer.appendChild(itemDiv);
+            });
+            loadComplianceState();
+        }
+
+        function saveComplianceState() {
+            const checkboxes = document.querySelectorAll('.compliance-checkbox');
+            const state = {};
+            checkboxes.forEach(cb => {
+                state[cb.id] = cb.checked;
+            });
+            localStorage.setItem('complianceState', JSON.stringify(state));
+        }
+
+        function loadComplianceState() {
+            const savedState = localStorage.getItem('complianceState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                for (const id in state) {
+                    const cb = document.getElementById(id);
+                    if (cb) {
+                        cb.checked = state[id];
+                    }
+                }
+            }
+        }
+
+        function resetComplianceState() {
+            const checkboxes = document.querySelectorAll('.compliance-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+            });
+            localStorage.removeItem('complianceState');
+        }
+
+        // --- Upload section functions ---
+        function updateFileList() {
+            const rfpFileInput = document.getElementById('rfpFileInput');
+            const fileListContainer = document.getElementById('fileList');
+            const uploadRFPButton = document.getElementById('uploadRFPButton');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const minFiles = 5;
+            const maxFiles = 7;
+
+            fileListContainer.innerHTML = '';
+            const files = rfpFileInput.files;
+            if (files.length > 0) {
+                const ul = document.createElement('ul');
+                ul.className = 'list-disc list-inside space-y-1';
+                for (let i = 0; i < files.length; i++) {
+                    const li = document.createElement('li');
+                    li.textContent = files[i].name;
+                    ul.appendChild(li);
+                }
+                fileListContainer.appendChild(ul);
+                updateUploadButtonState(files.length);
+            } else {
+                fileListContainer.textContent = 'No files selected.';
+                updateUploadButtonState(0);
+            }
+        }
+
+        function updateUploadButtonState(numFiles) {
+            const uploadRFPButton = document.getElementById('uploadRFPButton');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const minFiles = 5;
+            const maxFiles = 7;
+
+            if (numFiles >= minFiles && numFiles <= maxFiles) {
+                uploadRFPButton.disabled = false;
+                uploadStatus.textContent = `Ready to simulate upload of ${numFiles} files.`;
+                uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-gray-700';
+            } else {
+                uploadRFPButton.disabled = true;
+                if (numFiles === 0) {
+                    uploadStatus.textContent = 'Please select files.';
+                } else if (numFiles < minFiles) {
+                    uploadStatus.textContent = `Please select at least ${minFiles} files. Currently selected: ${numFiles}.`;
+                } else if (numFiles > maxFiles) {
+                    uploadStatus.textContent = `Please select no more than ${maxFiles} files. Currently selected: ${numFiles}.`;
+                }
+                uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-red-600';
+            }
+        }
+
+        function generateSimulatedRfpData(numFiles) {
+            const simulatedData = {};
+            // Use a copy of the initial data structure as base
+            const initialRfpDataKeys = Object.keys(rfpDataGlobal);
+            
+            let scaleFactor = numFiles / 5; // Base case: 5 files. Scale question counts.
+
+            initialRfpDataKeys.forEach(category => {
+                const baseCount = rfpDataGlobal[category].length;
+                const newCount = Math.max(1, Math.floor(baseCount * scaleFactor * (0.8 + Math.random() * 0.4))); // Randomize a bit
+                // Populate with generic simulated questions
+                simulatedData[category] = Array.from({ length: newCount }, (_, i) => `${category} Q${i + 1} (Simulated from ${numFiles} RFPs)`);
+            });
+
+            // Add new categories to demonstrate expansion with more files, if applicable
+            if (numFiles >= 6) {
+                const newCatName = "Emerging Trends & ESG";
+                simulatedData[newCatName] = Array.from({ length: Math.max(2, (numFiles - 5) * 2) }, (_, i) => `${newCatName} Q${i + 1} (New - ${numFiles} RFPs)`);
+            }
+            if (numFiles === 7) {
+                const newCatName2 = "Operational Resilience & Cybersecurity";
+                simulatedData[newCatName2] = Array.from({ length: Math.max(2, (numFiles - 6) * 3) }, (_, i) => `${newCatName2} Q${i + 1} (New - ${numFiles} RFPs)`);
+            }
+            
+            return simulatedData;
+        }
+
+        async function simulateUploadToFastAPI() {
+            const rfpFileInput = document.getElementById('rfpFileInput');
+            const uploadRFPButton = document.getElementById('uploadRFPButton');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const files = rfpFileInput.files;
+            const minFiles = 5;
+            const maxFiles = 7;
+
+            if (files.length < minFiles || files.length > maxFiles) {
+                uploadStatus.textContent = `Error: Please select between ${minFiles} and ${maxFiles} files.`;
+                uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-red-600';
+                return;
+            }
+
+            uploadRFPButton.disabled = true;
+            uploadStatus.textContent = 'Simulating upload and processing... This may take a moment.';
+            uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-blue-600';
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('rfp_files', files[i]);
+            }
+
+            try {
+                // Simulate a network request to FastAPI
+                console.log('Simulating fetch to FastAPI with:', files.length, 'files');
+                // In a real application, you would do:
+                // const response = await fetch('/api/upload_rfp', { method: 'POST', body: formData });
+                // const result = await response.json(); // Process actual backend response
+
+                // Simulate a delay for processing
+                await new Promise(resolve => setTimeout(resolve, 3000)); 
+
+                // Update the global rfpDataGlobal with new simulated data
+                rfpDataGlobal = generateSimulatedRfpData(files.length);
+
+                // Re-render UI based on new data
+                initializeSectionChart();
+                populateCategoryFilter();
+                renderQuestions();
+                renderCategoryCards();
+                // renderComplianceChecklist(); // No change to compliance questions, so no need to re-render
+
+                uploadStatus.textContent = `Successfully simulated processing of ${files.length} RFPs! Overview updated.`;
+                uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-green-600';
+                console.log('Simulated FastAPI response: Data extracted and knowledge base updated.');
+
+                // Clear files and redirect
+                rfpFileInput.value = ''; // Clear file input
+                updateFileList(); // Update UI to show no files selected and reset button state
+                
+                showAllSectionsAndNav(); // Make all nav buttons and sections visible
+                showSection('overview'); // Navigate to overview
+                
+            } catch (error) {
+                uploadStatus.textContent = 'Simulated upload failed. Please try again.';
+                uploadStatus.className = 'mt-4 w-full max-w-xl text-center text-sm text-red-600';
+                console.error('Simulated upload error:', error);
+            } finally {
+                uploadRFPButton.disabled = false;
+            }
+        }
+
+        function showAllSectionsAndNav() {
+            // Show the main navigation bar
+            document.getElementById('main-nav').classList.remove('hidden');
+            // Hide the upload-only navigation bar
+            document.getElementById('upload-nav-only').classList.add('hidden');
+        }
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event Listeners for main navigation
+            document.querySelectorAll('#main-nav .nav-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    showSection(button.dataset.section);
+                });
+            });
+
+            // Event listener for category filter
+            document.getElementById('categoryFilter').addEventListener('change', (event) => {
+                renderQuestions(event.target.value);
+            });
+
+            // Event listeners for compliance checklist
+            document.getElementById('complianceChecklistContainer').addEventListener('change', (event) => {
+                if (event.target.classList.contains('compliance-checkbox')) {
+                    saveComplianceState();
+                }
+            });
+
+            document.getElementById('resetCompliance').addEventListener('click', () => {
+                resetComplianceState();
+            });
+
+            // Event listeners for upload section
+            document.getElementById('rfpFileInput').addEventListener('change', updateFileList);
+            document.getElementById('uploadRFPButton').addEventListener('click', simulateUploadToFastAPI);
+            
+            // Initial render calls for static content and default view
+            initializeSectionChart(); // Initialize chart with default data
+            populateCategoryFilter(); // Populate filter with default categories
+            renderQuestions(); // Render questions based on default data
+            renderCategoryCards(); // Render category cards based on default data
+            renderComplianceChecklist(); // Render compliance checklist
+            
+            showSection('upload'); // Start on the upload section
+            updateUploadButtonState(0); // Initialize upload button state
+        });
+    </script>
+</body>
+</html>
