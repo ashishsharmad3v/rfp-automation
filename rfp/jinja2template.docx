@@ -1,0 +1,318 @@
+{# rfp_template.docx (Jinja2 Template Content) #}
+{#
+    NOTE: For a light gradient background image on every page,
+    it is recommended to pre-configure this as a repeating background
+    or watermark directly within the base Word (.docx) template file
+    before using it with python-docx-template. Jinja2 focuses on
+    content insertion, not complex document styling like page backgrounds.
+#}
+
+{# --- HEADER FOR FIRST PAGE ONLY --- #}
+{% if page_number == 1 %}
+<w:hdr>
+    <w:p>
+        <w:pPr>
+            <w:jc w:val="center"/>
+        </w:pPr>
+        <w:r>
+            <w:pict>
+                {# Placeholder for the logo image. It will be rendered by the Python script. #}
+                <v:shape style="width:100pt;height:100pt;">
+                    <v:imagedata src="{% image logo_path %}" o:title="ABC Trust Logo"/>
+                </v:shape>
+            </w:pict>
+        </w:r>
+    </w:p>
+</w:hdr>
+{% else %}
+{# --- DEFAULT HEADER FOR SUBSEQUENT PAGES --- #}
+<w:hdr>
+    <w:p>
+        <w:pPr>
+            <w:jc w:val="right"/>
+        </w:pPr>
+        <w:r><w:t>ABC Trust | Request for Proposal</w:t></w:r>
+    </w:p>
+</w:hdr>
+{% endif %}
+
+
+{# --- FOOTER FOR ALL PAGES --- #}
+<w:ftr>
+    <w:p>
+        <w:pPr>
+            <w:jc w:val="center"/>
+        </w:pPr>
+        <w:r>
+            <w:t>Page </w:t>
+            <w:fldChar w:fldCharType="begin" />
+            <w:r><w:fldChar w:fldCharType="separate" /><w:t>PAGE </w:t></w:r>
+            <w:fldChar w:fldCharType="end" />
+            <w:t> of </w:t>
+            <w:fldChar w:fldCharType="begin" />
+            <w:r><w:fldChar w:fldCharType="separate" /><w:t>NUMPAGES </w:t></w:r>
+            <w:fldChar w:fldCharType="end" />
+        </w:r>
+        {# --- DISCLAIMER FOR LAST PAGE ONLY --- #}
+        {% if page_number == num_pages %}
+        <w:r><w:t xml:space="preserve"></w:t></w:r>
+        <w:p>
+            <w:pPr>
+                <w:jc w:val="center"/>
+            </w:pPr>
+            <w:r><w:t>Disclaimer: This document contains proprietary and confidential information of ABC Trust. Unauthorized use or disclosure is strictly prohibited.</w:t></w:r>
+        </w:p>
+        {% endif %}
+    </w:p>
+</w:ftr>
+
+{# --- DOCUMENT TITLE PAGE (First Page) --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+        <w:pBdr>
+            <w:top w:val="single" w:sz="24" w:space="1" w:color="auto"/>
+            <w:bottom w:val="single" w:sz="24" w:space="1" w:color="auto"/>
+        </w:pBdr>
+        <w:spacing w:after="240"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve"></w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+        <w:spacing w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>REQUEST FOR PROPOSAL</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+        <w:spacing w:after="2440"/>
+    </w:pPr>
+    <w:r><w:t>Investment Services for ABC Trust</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t>{{ current_date }}</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+        <w:spacing w:before="240"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve"></w:t></w:r>
+</w:p>
+
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t>Prepared for: Prospective Investment Service Providers</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve"></w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+        <w:spacing w:after="240"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve"></w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve"></w:t></w:r>
+</w:p>
+
+{# --- EXECUTIVE SUMMARY SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>1. Executive Summary</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ executive_summary_content }}</w:t></w:r>
+</w:p>
+
+{# --- FIRM OVERVIEW SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>2. Firm Overview</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ firm_overview_content }}</w:t></w:r>
+</w:p>
+{% for question in firm_overview_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- CLIENT SERVICING TEAM SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>3. Client Servicing Team</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ client_servicing_content }}</w:t></w:r>
+</w:p>
+{% for question in client_servicing_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- INVESTMENT PHILOSOPHY AND PROCESS SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>4. Investment Philosophy and Process</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ investment_philosophy_content }}</w:t></w:r>
+</w:p>
+{% for question in investment_philosophy_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- INVESTMENT MANAGER RESEARCH AND SELECTION SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>5. Investment Manager Research and Selection</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ investment_manager_content }}</w:t></w:r>
+</w:p>
+{% for question in investment_manager_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- PERFORMANCE REPORTING SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>6. Performance Reporting</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ performance_reporting_content }}</w:t></w:r>
+</w:p>
+{% for question in performance_reporting_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- COMPLIANCE AND CONFLICT OF INTEREST SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>7. Compliance and Conflict of Interest</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ compliance_content }}</w:t></w:r>
+</w:p>
+{% for question in compliance_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
+{# --- FEES SECTION --- #}
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:before="480" w:after="240"/>
+    </w:pPr>
+    <w:r><w:t>8. Fees</w:t></w:r>
+</w:p>
+<w:p>
+    <w:pPr>
+        <w:jc w:val="left"/>
+        <w:spacing w:after="120"/>
+    </w:pPr>
+    <w:r><w:t>{{ fees_content }}</w:t></w:r>
+</w:p>
+{% for question in fees_questions %}
+<w:p>
+    <w:pPr>
+        <w:ind w:left="360"/>
+    </w:pPr>
+    <w:r><w:t>• {{ question }}</w:t></w:r>
+</w:p>
+{% endfor %}
+
